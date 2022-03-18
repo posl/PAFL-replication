@@ -1,0 +1,9 @@
+data/
+tmp/
+prism_api/prism/
+__pycache__/
+*.pyc
+*.csv
+*.pdf
+.vscode/
+.DS_Store
