@@ -102,3 +102,11 @@ $ bash utest.sh
 - These prediction performances are averaged and compared between ex and rand, and the counts of cases where ex has lower prediction performance are saved as a csv file in `experimements/RQ2/pred_results/n={n}_theta={theta}.csv` (same as Table 5 in our paper).
 - The results of utest (p-value and effect size) are saved in `experimements/RQ2/stats_results/raw/n={n}_theta={theta}.csv`.
 - The counts of statistically significant and large effect sizes for ex are saved in `experimements/RQ2/stats_results/cnt/n={n}_theta={theta}.csv` (same as Table 6 in our paper).
+
+### Discussion
+Reproduce Discussion results:
+```bash
+$ cd ../Discussion
+$ python kn_dataset_relation.py
+```
+- The plot of parameters $(k,n)$ at the lowest/highest for each metric in the selected data samples is saved in the same directory.
