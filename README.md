@@ -23,6 +23,8 @@ $ pwd
 Download the directory from google drive of the following link and put it under `PAFL-relplicatioin/data`. \
 https://drive.google.com/drive/folders/1EcW-BU75erBuTC-cWFmuKo36cUiysP5s?usp=sharing
 
+After that, `PAFL-relplicatioin/data/trained_models` and `PAFL-relplicatioin/data/training_data` should be existed.
+
 ## 1. Containers preparation
 Build docker images:
 ```bash
