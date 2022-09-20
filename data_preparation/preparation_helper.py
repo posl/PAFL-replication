@@ -42,7 +42,7 @@ def make_wv_matrix(data, word_vectors):
   wv_matrix = []
   for i in range(len(data["vocab"])):
     word = data["idx_to_word"][i]
-    if word in word_vectors.vocab:
+    if word in list(word_vectors.key_to_index.keys()):
       wv_matrix.append(word_vectors.word_vec(word))
     else:
       wv_matrix.append(np.random.uniform(-0.01, 0.01, 300).astype("float32"))

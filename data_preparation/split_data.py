@@ -42,7 +42,7 @@ def data_split4extract(data, data_source, ratio):
   data["val_x"], data["val_y"] = data["val_x"].tolist(), data["val_y"].tolist()
 
   # {data_source}_x, {data_source}_yの更新(ex_x, ex_yの分を取り除く)
-  data[target_x], data[target_y] = np.delete(data[target_x], indices), np.delete(data[target_y], indices)
+  data[target_x], data[target_y] = np.delete(data[target_x], indices, axis=0), np.delete(data[target_y], indices, axis=0)
   # 型をlistに戻しておく
   data[target_x], data[target_y] = data[target_x].tolist(), data[target_y].tolist()
 

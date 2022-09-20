@@ -1,5 +1,6 @@
 import sys
 sys.path.append('../') # utilsをインポートするため必要
+import argparse
 from sklearn.utils import resample
 # 異なる階層utilsからのインポート
 from utils.constant import *
@@ -32,19 +33,22 @@ def bootstrap_sampling(data, save_dir, B=10, target="train"):
 
 
 if __name__ == "__main__":
-  target = sys.argv[1]
-  if target is None:
-    target = "train"
-  # tomita以外の3つ
-  for dataset in [DataSet.BP, DataSet.IMDB, DataSet.MR]:
+  parser = argparse.ArgumentParser()
+  parser.add_argument("dataset", type=str, help='abbrev. of datasets')
+  parser.add_argument("target", type=str, help='train or val', default='train', choices=['train', 'val'])
+  args = parser.parse_args()
+  dataset, target = args.dataset, args.target
+
+  if dataset == 'tomita':
+    # tomita7つ
+    for tomita_id in range(1, 8, 1):
+      # train, val, test分割後データをロード
+      split_data = load_pickle(get_path(DataPath.TOMITA.SPLIT_DATA.format(tomita_id)))
+      # bootstrapで分割したデータを保存
+      bootstrap_sampling(split_data, get_path(DataPath.TOMITA.BOOT_DATA_DIR.format(tomita_id)), B=10, target=target)
+  # tomita以外
+  else:
     # train, val, test分割後データをロード
     split_data = load_pickle(get_path(getattr(DataPath, dataset.upper()).SPLIT_DATA))
-    # trainingデータをbootstrapで分割したデータを保存
+    # bootstrapで分割したデータを保存
     bootstrap_sampling(split_data, get_path(getattr(DataPath, dataset.upper()).BOOT_DATA_DIR), B=10, target=target)
-  
-  # tomita7つ
-  for tomita_id in range(1, 8, 1):
-    # train, val, test分割後データをロード
-    split_data = load_pickle(get_path(DataPath.TOMITA.SPLIT_DATA.format(tomita_id)))
-    # trainingデータをbootstrapで分割したデータを保存
-    bootstrap_sampling(split_data, get_path(DataPath.TOMITA.BOOT_DATA_DIR.format(tomita_id)), B=10, target=target)
