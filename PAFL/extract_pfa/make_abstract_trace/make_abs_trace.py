@@ -8,9 +8,9 @@ import numpy as np
 from utils.constant import START_SYMBOL, PartitionType, get_path
 from model_utils.model_util import sent2tensor
 # 同じ階層のmake_abstract_traceからのインポート
-from PAFL.extract_pfa.make_abstract_trace.partitioner import Partitioner, Kmeans, EHCluster
+from RNNfault.extract_pfa.make_abstract_trace.partitioner import Partitioner, Kmeans, EHCluster
 
-def get_term_symbol(y_pre):
+def get_term_symbol(y_pre, binary=True):
   """
   予測ラベルからシンボルを返す
   0->"N"(ネガティブ), 1->"P"(ポジティブ)
@@ -25,12 +25,13 @@ def get_term_symbol(y_pre):
   : str
     予測ラベルに対応するシンボル(文字)
   """
-  if y_pre == 0:
-    return 'N'
-  elif y_pre == 1:
-    return "P"
+  if binary:
+    if y_pre == 0:
+      return 'N'
+    elif y_pre == 1:
+      return "P"
   else:
-    raise Exception("unknown label:{}".format(y_pre))
+    return f"L{y_pre}"
 
 def _hn2probas(hn_vec, rnn):
   """
@@ -118,7 +119,7 @@ def _rnn_traces2point(rnn_traces):
   input_points = np.array(input_points)
   return input_points, seq_len
 
-def make_L1_abs_trace(labels, seq_len, y_pre):
+def make_L1_abs_trace(labels, seq_len, y_pre, num_class):
   """
   隠れ状態ベクトル(or 確率ベクトル)をクラスタリングしたリストを, サンプルごとに1つにまとめる.
   出力のイメージとしては, 
@@ -141,6 +142,8 @@ def make_L1_abs_trace(labels, seq_len, y_pre):
     各サンプルの長さを保持する配列
   y_pre: list of int
     予測ラベルのリスト
+  num_class: int
+    目的変数のクラス数
   
   Returns
   ------------------
@@ -149,10 +152,12 @@ def make_L1_abs_trace(labels, seq_len, y_pre):
   """
   start_p = 0
   abs_seqs = []
+  # 目的変数がバイナリかどうかのフラグ
+  binary = True if num_class == 2 else False
   for size, y in zip(seq_len, y_pre):
     # input_points の各データのラベルのリストから，各データのサイズの分だけスライスする
     abs_trace = labels[start_p:start_p + size]
-    term_symbol = get_term_symbol(y)
+    term_symbol = get_term_symbol(y, binary)
     # 各データに対する abstract trace をここで形成している
     abs_trace = [START_SYMBOL] + abs_trace + [term_symbol]
     abs_seqs.append(abs_trace)
@@ -189,6 +194,7 @@ def level1_abstract(**kwargs):
   rnn_traces = kwargs["rnn_traces"]
   y_pre = kwargs["y_pre"]
   pt_type = kwargs["partition_type"]
+  num_class = kwargs["num_class"]
 
   # 隠れ状態ベクトルでなく, 確率ベクトルでクラスタリングする場合
   if pt_type == PartitionType.KMP:
@@ -202,7 +208,7 @@ def level1_abstract(**kwargs):
   if kwargs["partitioner_exists"]:
     partioner = kwargs["partitioner"]
     labels = list(partioner.predict(input_points))
-    abs_seqs = make_L1_abs_trace(labels, seq_len, y_pre)
+    abs_seqs = make_L1_abs_trace(labels, seq_len, y_pre, num_class)
     return abs_seqs
   # このプログラム内でクラスタリングの学習から実行する場合
   else:
@@ -220,7 +226,7 @@ def level1_abstract(**kwargs):
     # input_pointsの各データに対するラベルのリストを返す
     labels = partitioner.get_fit_labels()
     # abstract trace の形に整形する
-    abs_seqs = make_L1_abs_trace(labels, seq_len, y_pre)
+    abs_seqs = make_L1_abs_trace(labels, seq_len, y_pre, num_class)
     return abs_seqs, partitioner
 
 def save_level1_traces(abs_seqs, output_path):
