@@ -26,35 +26,40 @@ if __name__ == "__main__":
   # デバイスの設定
   device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
   # pred_res_dfの保存ディレクトリのパスを取得
-  pred_res_save_dir = TrainedModel.PRED_RESULT_FOR_LOOK
+  pred_res_save_dir = getattr(TrainedModel, model_type.upper()).PRED_RESULT_FOR_LOOK
   # pred_res_dfの保存ディレクトリが存在しなかったら, 作成する
   if not os.path.isdir(pred_res_save_dir):
     os.makedirs(pred_res_save_dir)
   # pred_res_dfを作成
   pred_res_df = pd.DataFrame(index=[], columns=[])
+  exit()
   
-  for dataset in ['3', '4', '7', DataSet.BP, DataSet.MR, DataSet.IMDB]:
+  for dataset in ['3', '4', '7', DataSet.BP, DataSet.MR, DataSet.IMDB, DataSet.MNIST, DataSet.TOXIC]:
     # modelを入れる配列
     models = [] * B
     # tomitaかどうかのフラグ
     isTomita = True if dataset.isdigit() else False
+    # mnistかどうかのフラグ
+    isImage = True if dataset == DataSet.MNIST else False
     
     # オリジナルのデータセットをロード
     data = load_pickle(get_path(getattr(DataPath, dataset.upper()).SPLIT_DATA)) if not isTomita  else \
       load_pickle(get_path(DataPath.TOMITA.SPLIT_DATA.format(dataset)))
     # 埋め込み行列のロード
-    wv_matrix = load_pickle(get_path(getattr(DataPath, dataset.upper()).WV_MATRIX)) if not isTomita  else \
-      load_pickle(get_path(DataPath.TOMITA.WV_MATRIX.format(dataset)))
+    if not isImage:
+      wv_matrix = load_pickle(get_path(getattr(DataPath, dataset.upper()).WV_MATRIX)) if not isTomita  else \
+        load_pickle(get_path(DataPath.TOMITA.WV_MATRIX.format(dataset)))
     print("\ndataset = {}\nmodel_type= {}".format(dataset, model_type)) if not isTomita  else \
       print("\ndataset = {}\nmodel_type= {}".format("tomita_" + dataset, model_type))
 
     # モデルのパラメータを保持しておく
     params = getattr(train_args, "args_{}_{}".format(model_type, dataset))() if not isTomita  else \
       getattr(train_args, "args_{}_{}".format(model_type, "tomita"))()
-    params["WV_MATRIX"] = wv_matrix
-    params["device"] = device
-    params["use_clean"] = 0
     params["rnn_type"] = model_type
+    params["device"] = device
+    if not isImage:
+      params["WV_MATRIX"] = wv_matrix
+      params["use_clean"] = 0
 
     pred_res = defaultdict(float)
 
