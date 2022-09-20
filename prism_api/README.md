@@ -1,6 +1,6 @@
 prism_api
 ====
-Prism does not work depending on the architecture of the host machine (e.g. M1 Mac). 
+Prism does not work depending on the architecture of the host machine (e.g., M1 Mac). 
 
 Therefore, we construct a Web API of prism using FastAPI.
 
