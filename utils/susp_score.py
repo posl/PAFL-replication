@@ -8,6 +8,8 @@ import re
 from collections import defaultdict
 from utils.constant import *
 from utils.help_func import load_pickle, load_json
+# ゼロ除算を防ぐための定数
+EPS = 1e-09
 
 def get_susp_state_dict(model_type, dataset, boot_id, k, method="ochiai", target_source="val"):
   """
@@ -75,7 +77,7 @@ def get_susp_state(model_type, dataset, boot_id, k, method="ochiai", target_sour
   s = list(map(lambda x: x[0], susp_state_dict))[0]
   return s
 
-def get_susp_ngram_dict(model_type, dataset, boot_id, k, ngram_n, method="ochiai", target_source="val"):
+def get_susp_ngram_dict(model_type, dataset, boot_id, k, ngram_n, method, target_source="val"):
   """
   入力情報から疑惑n-gramのpklファイルを特定しロードする
 
@@ -370,7 +372,7 @@ def score_relative_ngram_susp(susp_ngram_dict, n, pfa_trace_path):
         ngram = str(tuple(ngram))
         relative_ngram_susp_score[i] += susp_ngram_dict[ngram]
         ngram_l += 1
-    relative_ngram_susp_score[i] /= max_susp
+    relative_ngram_susp_score[i] /= (max_susp + EPS) # 疑惑値が全部0の時の挙動がおかしくなるので + EPS しておく
     if ngram_l != 0: 
       relative_ngram_susp_score[i] /= ngram_l
   return relative_ngram_susp_score

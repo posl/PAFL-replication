@@ -1,14 +1,13 @@
 import os
-
-# プロジェクトルートのパス
-PROJECT_ROOT = "/src" # dockerでやるとき
+PROJECT_ROOT = "/src"
 # 学習済みword2vecモデルのパス
 WORD2VEC_PATH = "data/wordvec/GoogleNews-vectors-negative300.bin"
 # prismの実行ファイル
 # PRISM_SCRIPT = "/Users/ishimotoyuuta/OneDrive/prism-4.5-osx64/bin/prism" # localでやるとき
 PRISM_SCRIPT = "/home/ubuntu/prism/prism/bin/prism" # awsでやるとき
 # prism用の設定ファイル
-PROPERTY_FILE = "/prism_api/app/properties.pctl"
+PROPERTY_FILE_BINARY = "RNNfault/get_pfa_spectrum/properties_binary.pctl"
+PROPERTY_FILE_MNIST = "RNNfault/get_pfa_spectrum/properties_mnist.pctl"
 START_SYMBOL = 'S'
 
 # 入力パスにプロジェクトルートのパスをくっつけて返す
@@ -27,6 +26,9 @@ class DataSet:
   Tomita5 = "5"
   Tomita6 = "6"
   Tomita7 = "7"
+  # additional dataset after IST submission
+  TOXIC = "toxic"
+  MNIST = 'mnist'
 
 # モデルタイプ名の定義
 class ModelType:
@@ -61,21 +63,49 @@ class DataPath:
     SPLIT_DATA = "data/training_data/split_data/mr/mr.pkl"
     WV_MATRIX = "data/training_data/wv_matrix/mr/wv_matrix_mr.pkl"
     BOOT_DATA_DIR = "data/training_data/bootstrap_data/mr"
+  
+  class MNIST:
+    # there is no wv_matrix
+    RAW_DATA = "data/training_data/raw_data/mnist"
+    PROCESSED_DATA = "data/training_data/processed_data/mnist/processed_mnist.pkl"
+    SPLIT_DATA = "data/training_data/split_data/mnist/mnist.pkl"
+    BOOT_DATA_DIR = "data/training_data/bootstrap_data/mnist"
+
+  class TOXIC:
+    RAW_DATA = "data/training_data/raw_data/toxic"
+    PROCESSED_DATA = "data/training_data/processed_data/toxic/processed_toxic.pkl"
+    SPLIT_DATA = "data/training_data/split_data/toxic/toxic.pkl"
+    WV_MATRIX = "data/training_data/wv_matrix/toxic/wv_matrix_toxic.pkl"
+    BOOT_DATA_DIR = "data/training_data/bootstrap_data/toxic"
 
 # 学習済みモデルの格納パスを定義
 class TrainedModel:
   class LSTM:
     IMDB = "data/trained_models/lstm/imdb/"
     MR = "data/trained_models/lstm/mr/"
-    BP = "data/trained_models/lstm/bp/"  
+    BP = "data/trained_models/lstm/bp/"
     TOMITA = "data/trained_models/lstm/tomita_{}/"
+    MNIST = "data/trained_models/lstm/mnist/"
+    TOXIC = "data/trained_models/lstm/toxic/"
+    # 見やすいように整形された予測結果の保存パス(boot_idごとにまとめてある)
+    PRED_RESULT_FOR_LOOK = get_path("data/trained_models/lstm/pred_table_for_look/{}")
   class GRU:
     IMDB = "data/trained_models/gru/imdb/"
     MR = "data/trained_models/gru/mr/"
     BP = "data/trained_models/gru/bp/"
     TOMITA = "data/trained_models/gru/tomita_{}/"
-  # 見やすいように整形された予測結果の保存パス(boot_idごとにまとめてある)
-  PRED_RESULT_FOR_LOOK = get_path("data/trained_models/pred_table_for_look")
+    MNIST = "data/trained_models/gru/mnist/"
+    TOXIC = "data/trained_models/gru/toxic/"
+    PRED_RESULT_FOR_LOOK = get_path("data/trained_models/gru/pred_table_for_look/{}")
+  class SRNN:
+    IMDB = "data/trained_models/srnn/imdb/"
+    MR = "data/trained_models/srnn/mr/"
+    BP = "data/trained_models/srnn/bp/"
+    TOMITA = "data/trained_models/srnn/tomita_{}/"
+    MNIST = "data/trained_models/srnn/mnist/"
+    TOXIC = "data/trained_models/srnn/toxic/"
+    PRED_RESULT_FOR_LOOK = get_path("data/trained_models/srnn/pred_table_for_look/{}")
+  
 
 # original trace(RNNの隠れ状態のトレース)の格納パスを定義
 class OriTrace:
@@ -84,11 +114,22 @@ class OriTrace:
     MR = "data/original_trace/lstm/mr/"
     BP = "data/original_trace/lstm/bp/"
     TOMITA = "data/original_trace/lstm/tomita_{}/"
+    MNIST = "data/original_trace/lstm/mnist/"
+    TOXIC = "data/original_trace/lstm/toxic/"
   class GRU:
     IMDB = "data/original_trace/gru/imdb"
     MR = "data/original_trace/gru/mr"
     BP = "data/original_trace/gru/bp"
     TOMITA = "data/original_trace/gru/tomita_{}/"
+    MNIST = "data/original_trace/gru/mnist/"
+    TOXIC = "data/original_trace/gru/toxic/"
+  class SRNN:
+    IMDB = "data/original_trace/srnn/imdb"
+    MR = "data/original_trace/srnn/mr"
+    BP = "data/original_trace/srnn/bp"
+    TOMITA = "data/original_trace/srnn/tomita_{}/"
+    MNIST = "data/original_trace/srnn/mnist/"
+    TOXIC = "data/original_trace/srnn/toxic/"
 
 # クラスタリングのタイプを定義
 class PartitionType:
@@ -122,10 +163,13 @@ class ExtractData:
   EX = get_path("data/extracted_data/{}/{}/boot_{}/k={}/n={}/theta={}/ex_data.pkl")
   RAND = get_path("data/extracted_data/{}/{}/boot_{}/k={}/n={}/theta={}/rand_data.pkl")
   # 抽出したデータを予測した結果のdictの保存パス
-  EX_PRED = get_path("data/extracted_data/{}/{}/boot_{}/k={}/n={}/theta={}/ex_pred_result.pkl")
+  EX_PRED = get_path("data/extracted_data/{}/{}/boot_{}/k={}/n={}/theta={}/{}_pred_result.pkl")
   RAND_PRED = get_path("data/extracted_data/{}/{}/boot_{}/k={}/n={}/theta={}/rand_pred_result.pkl")
   # 見やすいように整形された予測結果の保存パス(theta, nの値ごとにまとめてある)
-  PRED_RESULT_FOR_LOOK = get_path("data/extracted_data/pred_table_for_look/boot_{}/n={}_theta={}.csv")
+  PRED_RESULT_FOR_LOOK = get_path("data/extracted_data/{}/pred_table_for_look/{}/boot_{}/n={}_theta={}.csv")
+  # 統計的検定&効果量の結果保存パス
+  STAT_RESULT = get_path("data/extracted_data/{}/stat_result/{}/boot_avg/n={}_theta={}.csv")
+  STAT_RESULT_CNT = get_path("data/extracted_data/{}/stat_result/{}/avg_cnt/n={}_theta={}.csv")
 
 class RetrainedModel:
   # 抽出, ランダムデータそれぞれで再学習したモデル及びテストデータに対する評価メトリクスの保存ディレクトリ
