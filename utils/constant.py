@@ -6,8 +6,8 @@ WORD2VEC_PATH = "data/wordvec/GoogleNews-vectors-negative300.bin"
 # PRISM_SCRIPT = "/Users/ishimotoyuuta/OneDrive/prism-4.5-osx64/bin/prism" # localでやるとき
 PRISM_SCRIPT = "/home/ubuntu/prism/prism/bin/prism" # awsでやるとき
 # prism用の設定ファイル
-PROPERTY_FILE_BINARY = "RNNfault/get_pfa_spectrum/properties_binary.pctl"
-PROPERTY_FILE_MNIST = "RNNfault/get_pfa_spectrum/properties_mnist.pctl"
+PROPERTY_FILE_BINARY = "PAFL/get_pfa_spectrum/properties_binary.pctl"
+PROPERTY_FILE_MNIST = "PAFL/get_pfa_spectrum/properties_mnist.pctl"
 START_SYMBOL = 'S'
 
 # 入力パスにプロジェクトルートのパスをくっつけて返す

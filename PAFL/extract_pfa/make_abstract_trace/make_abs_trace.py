@@ -8,7 +8,7 @@ import numpy as np
 from utils.constant import START_SYMBOL, PartitionType, get_path
 from model_utils.model_util import sent2tensor
 # 同じ階層のmake_abstract_traceからのインポート
-from RNNfault.extract_pfa.make_abstract_trace.partitioner import Partitioner, Kmeans, EHCluster
+from PAFL.extract_pfa.make_abstract_trace.partitioner import Partitioner, Kmeans, EHCluster
 
 def get_term_symbol(y_pre, binary=True):
   """

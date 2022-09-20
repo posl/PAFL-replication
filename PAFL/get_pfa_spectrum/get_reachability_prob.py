@@ -72,7 +72,7 @@ def prepare_prism_data(pm_file, num_prop):
         fw.writelines(raw_pm_lines)
   return  total_states, tmp_data_path
 
-def _get_reachability_prob(prism_script, data_path, start_s, prop_id):
+def _get_reachability_prob(prism_script, data_path, start_s, prop_id, is_multiclass):
   """
   get reachability prob of a state => a label.
     pfaの状態(start_s)から, 予測ラベル(prop_id)に対応するpfaの状態への, reachability prob(到達確率)を返す.
@@ -96,13 +96,17 @@ def _get_reachability_prob(prism_script, data_path, start_s, prop_id):
   """
   # 使用するpmファイルのパス
   pm_file = os.path.join(data_path, "s{}_p{}.pm".format(start_s, prop_id))
+  if not is_multiclass:
+    property_file = get_path(PROPERTY_FILE_BINARY)
+  else:
+    property_file = get_path(PROPERTY_FILE_MNIST)
   # send http request to prism server
   headers = {
     'accept': 'application/json',
   }
   params = (
     ('pm_file', os.path.join(*pm_file.split('/')[4:])),
-    ('property_file', PROPERTY_FILE),
+    ('property_file', property_file),
     ('prop_id', prop_id)
   )
   output = requests.get('http://prism_server:8000/prism', headers=headers, params=params).text.strip('"')
@@ -113,7 +117,7 @@ def _get_reachability_prob(prism_script, data_path, start_s, prop_id):
   reachability_prob = float(output[-2].split()[1])
   return reachability_prob
 
-def get_state_reachability(tmp_prism_data_path, num_prop, start_s):
+def get_state_reachability(tmp_prism_data_path, num_prop, start_s, is_multiclass):
   """
   get reachability prob of a state => all labels.
     pfaでの開始状態start_sから, 各予測ラベル(に対応するpfaの状態)へのreachability probを計算する
@@ -136,7 +140,7 @@ def get_state_reachability(tmp_prism_data_path, num_prop, start_s):
   row = []
   # start_sから各予測ラベルへのreachability probを計算し, rowに追加する
   for prop_id in range(1, num_prop + 1):  # must be 1-index
-    ele = _get_reachability_prob(PRISM_SCRIPT, tmp_prism_data_path, start_s, prop_id)
+    ele = _get_reachability_prob(PRISM_SCRIPT, tmp_prism_data_path, start_s, prop_id, is_multiclass)
     row.append(ele)
   return row
 

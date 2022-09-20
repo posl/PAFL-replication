@@ -5,8 +5,8 @@ sys.path.append("../../") # extract_pfa/learning_pfaからインポートする�
 sys.path.append("../../../") # utilsをインポートするために必要
 import argparse
 # 同じ階層learning_pfaからのインポート
-from RNNfault.extract_pfa.learning_pfa.aalergia import *
-from RNNfault.extract_pfa.learning_pfa.read_abs_data import load_trace_data
+from PAFL.extract_pfa.learning_pfa.aalergia import *
+from PAFL.extract_pfa.learning_pfa.read_abs_data import load_trace_data
 # 異なる階層のutilsからのインポート
 from utils.constant import *
 from utils.time_util import current_timestamp

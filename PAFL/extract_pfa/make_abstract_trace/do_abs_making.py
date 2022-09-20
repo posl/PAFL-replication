@@ -6,7 +6,7 @@ import argparse
 sys.path.append("../../") # extract_pfa/make_abstract_traceをインポートするために必要
 sys.path.append("../../../") # model_utils, utilsをインポートするために必要
 # 同階層のmake_abstract_traceからのインポート
-from RNNfault.extract_pfa.make_abstract_trace.make_abs_trace import *
+from PAFL.extract_pfa.make_abstract_trace.make_abs_trace import *
 # 異なる階層のutilsからのインポート
 from utils.constant import *
 from utils.help_func import save_pickle, load_pickle

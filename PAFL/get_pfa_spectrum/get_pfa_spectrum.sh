@@ -2,9 +2,9 @@
 
 set -e # Abort if one of the commands fail
 
-datasets=("3" "4" "7" "bp" "mr" "imdb")
-
-for e in ${datasets[@]}; do
-  echo dataset=${e}, model_type="lstm"
-  python do_pfa_spectrum.py ${e} "lstm"
+for dataset in 3 4 7 bp mr imdb toxic mnist; do
+for variant in srnn gru lstm; do
+  echo dataset=$dataset, variant=$variant
+  python do_pfa_spectrum.py $dataset $variant
+done
 done

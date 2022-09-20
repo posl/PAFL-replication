@@ -5,6 +5,7 @@ sys.path.append("../../")
 # 異なる階層のRNNfault/extract_pfa/make_abstract_trace/make_abs_traceをインポートするために必要
 sys.path.append("../")
 import numpy as np
+import torch
 from collections import defaultdict
 # 異なる階層utilsからのインポート
 from utils.help_func import filter_stop_words, save_pickle
@@ -16,7 +17,7 @@ from PAFL.extract_pfa.make_abstract_trace.make_abs_trace import level1_abstract
 # 同じ階層get_pfa_spectrumからのインポート
 from PAFL.get_pfa_spectrum.get_reachability_prob import get_state_reachability
 
-def extract_l1_trace(x, model, input_dim, word2idx, wv_matrix, device, partitioner, pt_type=PartitionType.KM, use_clean=False):
+def extract_l1_trace(x, model, input_dim, device, partitioner, word2idx=None, wv_matrix=None, pt_type=PartitionType.KM, use_clean=True, num_class=2):
   """
   サンプル x のabstract traceを取得する.
   abstract trace取得のために, 学習済みのpartitionerを利用する.
@@ -42,6 +43,8 @@ def extract_l1_trace(x, model, input_dim, word2idx, wv_matrix, device, partition
     Kmeansを使う場合, "KM"
   use_clean: bool
     fileter_stop_wordsを行う場合True, そうでなければFalse.
+  num_class: int
+    目的変数のクラス数．
   
   Returns
   ------------------
@@ -50,15 +53,19 @@ def extract_l1_trace(x, model, input_dim, word2idx, wv_matrix, device, partition
   """
   if use_clean:
     x = filter_stop_words(x)
-  # xを文からtensorに変換する
-  x_tensor = sent2tensor(x, input_dim, word2idx, wv_matrix, device)
+  if (word2idx is not None) and (wv_matrix is not None):
+    # xを文からtensorに変換する
+    x_tensor = sent2tensor(x, input_dim, word2idx, wv_matrix, device)
+  else:
+    # xを画像（多分）からtensorに変換する
+    x_tensor = torch.unsqueeze(torch.tensor(x), 0) / 255 # (1, 28, 28)
   # xを入力した時のRNNの各時刻での隠れ状態とラベルのリストを取得
   hn_trace, label_trace = model.get_predict_trace(x_tensor)
   # 最終的な予測ラベルのみを取り出す
   rnn_pred = label_trace[-1]
   # 学習済みのpartitonerを用いて隠れ状態ベクトルをクラスタに割り当てて得られるabs_traceを返す
   abs_seq = level1_abstract(rnn=None, rnn_traces=[hn_trace], y_pre=[rnn_pred],
-                              partitioner=partitioner,
+                              partitioner=partitioner, num_class=num_class,
                               partitioner_exists=True, partition_type=pt_type)[0]
   return abs_seq
 
@@ -85,7 +92,7 @@ def trace_abs_seq(abs_seq, trans_func, trans_wfunc, total_states):
   pass_mat: list of list of int
     pass_mat[i][j] = PFAの状態iから状態jへの遷移があった場合1, そうでない場合0となる行列
   """
-
+  # print(abs_seq)
   # 通過した遷移の行列
   pass_mat = np.zeros((total_states,total_states), dtype=int)
   # 初期状態
@@ -99,6 +106,7 @@ def trace_abs_seq(abs_seq, trans_func, trans_wfunc, total_states):
     else:
       new_s = trans_func[s][str(abs_seq[i])]
       L2_trace.append(new_s)
+      # print(f'now:{s}, in:{str(abs_seq[i])} => {new_s},  {L2_trace}')
       pass_mat[s-1][new_s-1] = 1
       s = new_s
   return L2_trace, pass_mat
@@ -135,6 +143,8 @@ def test_acc_fdlt(**kwargs):
     PFAの状態数. trace_abs_seqで必要.
   save_path: str
     pfa specrum(行列)を保存するディレクトリのパス.
+  num_class: int
+    目的変数のクラス数
 
   Returns
   ------------------
@@ -158,21 +168,23 @@ def test_acc_fdlt(**kwargs):
   X = kwargs["X"]
   Y = kwargs["Y"]
   dfa = kwargs["dfa"]
+  trans_func, trans_wfunc = dict(dfa["trans_func"]), dict(dfa["trans_wfunc"])
   tmp_prism_data = kwargs["tmp_prism_data"]
+  model = kwargs["model"]
+  partitioner = kwargs["partitioner"]
+  input_dim = kwargs["input_dim"]
+  device = kwargs["device"]
+  total_states = kwargs["total_states"]
+  save_path = kwargs["save_path"]
+  num_class = kwargs["num_class"]
+  is_multiclass = True
   if kwargs["input_type"] == "text":
-    model = kwargs["model"]
-    partitioner = kwargs["partitioner"]
     word2idx = kwargs["word2idx"]
     wv_matrix = kwargs["wv_matrix"]
-    input_dim = kwargs["input_dim"]
-    device = kwargs["device"]
-    total_states = kwargs["total_states"]
-    save_path = kwargs["save_path"]
-    is_text = True
-  else:
-    is_text = False
-  trans_func, trans_wfunc = dict(dfa["trans_func"]), dict(dfa["trans_wfunc"])
-  
+    is_multiclass = False
+  val_pred_labels = np.array(kwargs["val_pred_labels"])
+  use_clean = kwargs['use_clean']
+
   # pfaによる予測の結果をまとめたjsonオブジェクトを作成
   pred_info = {}
   pred_info["total_states"] = total_states          # pfaの状態数
@@ -180,8 +192,8 @@ def test_acc_fdlt(**kwargs):
   pred_info["rnn_acc"] = 0                          # 元のRNNの正解率
   pred_info["fdlt"] = 0                             # 忠実度
   pred_info["unspecified"] = 0                      # 遷移不定の数
-  pred_info["rnn_conti_table"] = [[0, 0], [0, 0]]   # rnnの予測の分割表
-  pred_info["pfa_conti_table"] = [[0, 0], [0, 0]]   # pfaの予測の分割表
+  # pred_info["rnn_conti_table"] = [[0, 0], [0, 0]]   # rnnの予測の分割表
+  # pred_info["pfa_conti_table"] = [[0, 0], [0, 0]]   # pfaの予測の分割表
 
   # 変数の定義
   pmc_cache = {}  # 最終的なPFAの状態 => 各予測ラベルへのreachability probのキャッシュ
@@ -195,6 +207,8 @@ def test_acc_fdlt(**kwargs):
   lastinner_count = defaultdict(int)
   # 状態 -> 成功,失敗数のリストへの辞書
   lastinner_result = defaultdict(lambda: [0, 0])
+  # トレースから得られるRNNの予測ラベル
+  rnn_pred_labels = []
 
   # 成功/失敗した場合の各データの状態遷移のログファイルが，既に存在する場合は消しておく
   os.remove('{}/succ_trace.txt'.format(save_path)) if os.path.exists('{}/succ_trace.txt'.format(save_path)) else None
@@ -202,13 +216,20 @@ def test_acc_fdlt(**kwargs):
 
   # テストデータの各サンプルについて繰り返す
   for x, y in zip(X, Y):
-    if is_text:
-      # サンプルのabstract traceを取得
-      abs_trace = extract_l1_trace(x, model, input_dim, word2idx, wv_matrix, device, partitioner)
+    # サンプルのabstract traceを取得
+    if kwargs['input_type'] == 'text':
+      abs_trace = extract_l1_trace(x, model, input_dim, device, partitioner, word2idx=word2idx, wv_matrix=wv_matrix, num_class=num_class, use_clean=use_clean)
     else:
-      abs_trace = x
+      abs_trace = extract_l1_trace(x, model, input_dim, device, partitioner, num_class=num_class, use_clean=use_clean)
+    # print(abs_trace)
+    # continue
     # abs_traceの最後の文字からrnnの予測を特定
-    rnn_pred = 0 if abs_trace[-1] == 'N' else 1
+    if not is_multiclass:
+      rnn_pred = 0 if abs_trace[-1] == 'N' else 1
+    else:
+      rnn_pred = int(abs_trace[-1].lstrip('L'))
+    rnn_pred_labels.append(rnn_pred)
+
     # abs_traceをpfa上でトレース
     L2_trace, pass_mat = trace_abs_seq(abs_trace, trans_func, trans_wfunc, total_states)
     # 予測ラベルの状態の前の最後の状態を取り出す
@@ -218,7 +239,7 @@ def test_acc_fdlt(**kwargs):
       probs = pmc_cache[last_inner]
     # キャッシュになければreachabilityを計算してキャッシュに入れる
     else:
-      probs = get_state_reachability(tmp_prism_data, num_prop=2, start_s=last_inner)
+      probs = get_state_reachability(tmp_prism_data, num_prop=num_class, start_s=last_inner, is_multiclass=is_multiclass)
       pmc_cache[last_inner] = probs
     # reachabilityの最大のラベルをPFAの予測ラベルとする
     pfa_pred = np.argmax(probs)
@@ -229,8 +250,8 @@ def test_acc_fdlt(**kwargs):
     lastinner_count[last_inner] += 1
     
     # 分割表の更新
-    pred_info["rnn_conti_table"][rnn_pred][y] += 1
-    pred_info["pfa_conti_table"][pfa_pred][y] += 1
+    # pred_info["rnn_conti_table"][rnn_pred][y] += 1
+    # pred_info["pfa_conti_table"][pfa_pred][y] += 1
 
     # rnn_predが正解ラベルと一致した場合
     if rnn_pred == y:
@@ -255,10 +276,10 @@ def test_acc_fdlt(**kwargs):
     if L2_trace[-1] == "T":
       pred_info["unspecified"] += 1
 
-  # print(pd.DataFrame(pfa_conti_table))
-  # print(reachable_dict)
-  # print(lastinner_count)
-  # print(lastinner_result)
+  rnn_pred_labels = np.array(rnn_pred_labels)
+  if sum(rnn_pred_labels != val_pred_labels) != 0:
+    print('error')
+    exit()
   pred_info["rnn_acc"] = pred_info["rnn_acc"] / len(Y)
   pred_info["pfa_acc"] = pred_info["pfa_acc"] / len(Y)
   pred_info["fdlt"] = pred_info["fdlt"] / len(Y)
