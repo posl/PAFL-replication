@@ -32,8 +32,11 @@ class LSTM(MyModule):
         output, (hn, cn) = self.forward(input_sequences)
         if not isinstance(output, PackedSequence):
             output = output if output.dim() == 2 else output[0]
-            pr_dstr = self.output_pr_dstr(output)
-            predict_trace = torch.argmax(pr_dstr, dim=1).cpu().numpy().tolist()  # (len_seq,1)
+            pr_dstr = self.output_pr_dstr(output) # logsoftmaxとった後の値
+            pr_dstr = torch.exp(pr_dstr) # 確率(softmaxとった後の値）に変換
+            # print(pr_dstr, pr_dstr.shape)
+            # print(torch.sum(pr_dstr, axis=1))
+            predict_trace = torch.argmax(pr_dstr, dim=1).cpu().numpy().tolist()  # (len_seq,)
             return [hn_step.cpu().detach().numpy().tolist() for hn_step in output], predict_trace
         else:
             raise Exception("Batch is not supported at the moment")
@@ -59,6 +62,27 @@ class GRU(MyModule):
             return [hn_step.cpu().detach().numpy().tolist() for hn_step in output], predict_trace
         else:
             raise Exception("Batch is not supported at the moment")
+
+class SRNN(MyModule):
+  def __init__(self, input_size, hidden_size, num_layers, num_class):
+      super(SRNN, self).__init__()
+      self.i2h = nn.RNN(batch_first=True, input_size=input_size, hidden_size=hidden_size, num_layers=num_layers)
+      self.h2o = nn.Linear(hidden_size, num_class)
+      self.softmax = nn.LogSoftmax(dim=1)
+
+  def forward(self, input):
+      output, h_n = self.i2h(input)
+      return output, h_n
+
+  def get_predict_trace(self, input_sequences):
+      output, hn = self.forward(input_sequences)
+      if not isinstance(output, PackedSequence):
+          output = output if output.dim() == 2 else output[0]  # (len_seq,hidden_size)
+          pr_dstr = self.output_pr_dstr(output)  # (len_seq,num_class)
+          predict_trace = torch.argmax(pr_dstr, dim=1).cpu().numpy().tolist()
+          return [hn_step.cpu().detach().numpy().tolist() for hn_step in output], predict_trace
+      else:
+          raise Exception("Batch is not supported at the moment")
 
 class GRU2(MyModule):
     def __init__(self, raw_input_size, innder_input_dim, hidden_size, num_layers, num_class, dataProcessor):

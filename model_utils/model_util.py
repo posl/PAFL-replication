@@ -5,7 +5,7 @@ import torch
 from sklearn.metrics import roc_curve, auc
 # 同階層のmodel_utilsからのインポート
 from model_utils import train_args
-from model_utils.gated_rnn import LSTM, GRU
+from model_utils.gated_rnn import LSTM, GRU, SRNN
 # 異なる階層のutilsからのインポート
 from utils.constant import *
 
@@ -28,6 +28,9 @@ def init_model(params):
                 hidden_size=params["hidden_size"], num_layers=params["num_layers"])
   elif params["rnn_type"] == ModelType.LSTM:
     model = LSTM(input_size=params["input_size"], num_class=params["output_size"],
+                  hidden_size=params["hidden_size"], num_layers=params["num_layers"])
+  elif params["rnn_type"] == ModelType.SRNN:
+    model = SRNN(input_size=params["input_size"], num_class=params["output_size"],
                   hidden_size=params["hidden_size"], num_layers=params["num_layers"])
   else:
     raise Exception("Unknow rnn type:{}".format(params["rnn_type"]))

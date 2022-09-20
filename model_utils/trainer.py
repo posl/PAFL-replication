@@ -7,9 +7,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.utils import shuffle
-from sklearn.metrics import *
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, matthews_corrcoef, confusion_matrix, roc_curve, roc_auc_score
 # 同階層のmodel_utilsからのインポート
-from model_utils.gated_rnn import LSTM, GRU
+from model_utils.gated_rnn import LSTM, GRU, SRNN
 from model_utils.model_util import sent2tensor, init_model
 # 異なる階層のutilsからのインポート
 from utils.constant import *
@@ -49,7 +49,11 @@ def test(data, model, params, mode="test", device="cpu"):
   for sent, c in zip(X, Y):
     if params["use_clean"]:
       sent = filter_stop_words(sent)
-    input_tensor = sent2tensor(sent, params["input_size"], data["word_to_idx"], params["WV_MATRIX"], device)
+    if params['is_image']:
+      input_tensor = torch.unsqueeze(torch.tensor(sent), 0) / 255 # (1, 28, 28)
+    else:
+      input_tensor = sent2tensor(sent, params["input_size"], data["word_to_idx"], params["WV_MATRIX"], device) # (1, sentの単語数, input_size)
+    input_tensor = input_tensor.to(device) # mnistでだけなぜかinput_tensorのdeviceがcpuになってたので追加した
     output, _ = model(input_tensor)
     lasthn = output[0][-1].unsqueeze(0)
     pred = model.h2o(lasthn) # => tensor([[Nのスコア，Pのスコア]])みたいに入ってる
@@ -87,6 +91,7 @@ def train(data, params, pre_model=None):
   # 事前学習済みのモデルを使う場合
   else:
     model = pre_model
+  # print(model)
   # モデルをdeviceに渡す
   device = params["device"]
   model = model.to(device)
@@ -110,10 +115,14 @@ def train(data, params, pre_model=None):
         sent = filter_stop_words(sent)
       label = [data["classes"].index(c)]
       label = torch.LongTensor(label).to(device)
-      # サンプルの文をtensorに変換する
-      input_tensor = sent2tensor(sent, params["input_size"], data["word_to_idx"], params["WV_MATRIX"], device)
+      if params['is_image']:
+        input_tensor = torch.unsqueeze(torch.tensor(sent), 0) / 255 # (1, 28, 28)
+      else:
+        # サンプルの文をtensorに変換する(画像データには対応できない)
+        input_tensor = sent2tensor(sent, params["input_size"], data["word_to_idx"], params["WV_MATRIX"], device) # (1, sentの単語数, input_size)
       optimizer.zero_grad()
       # モデルの出力を取得
+      input_tensor = input_tensor.to(device) # mnistでだけなぜかinput_tensorのdeviceがcpuになってたので追加した
       output, inner_states = model(input_tensor)
       lasthn = output[0][-1].unsqueeze(0)
       pred = model.h2o(lasthn)
@@ -144,6 +153,7 @@ def train(data, params, pre_model=None):
   # best_modelを訓練データに対しても評価する
   max_train_acc = test(data, best_model, params, mode="train", device=device)
   print("train_acc:{0:.4f}, test acc:{1:.4f}".format(max_train_acc, max_test_acc))
+  print(best_model)
   return best_model, max_train_acc, max_test_acc
 
 def test4eval(data, model, params, device="cpu", key_x="x", key_y="y"):
@@ -181,11 +191,15 @@ def test4eval(data, model, params, device="cpu", key_x="x", key_y="y"):
   # 予測ラベルのリスト
   y_pred = []
   # ポジティブ確率のリスト
-  pos_score = []
-  
+  scores = []
+
   # (データ,ラベル)1件ずつループ
   for sent, c in zip(X, Y):
-    input_tensor = sent2tensor(sent, params["input_size"], data["word_to_idx"], params["WV_MATRIX"], device)
+    if params['is_image']:
+      input_tensor = torch.unsqueeze(torch.tensor(sent), 0) / 255 # (1, 28, 28)
+    else:
+      input_tensor = sent2tensor(sent, params["input_size"], data["word_to_idx"], params["WV_MATRIX"], device)
+    input_tensor = input_tensor.to(device) # mnistでだけなぜかinput_tensorのdeviceがcpuになってたので追加した
     output, _ = model(input_tensor)
     lasthn = output[0][-1].unsqueeze(0)
     # 全結合層の出力(スコア)を取得
@@ -194,28 +208,40 @@ def test4eval(data, model, params, device="cpu", key_x="x", key_y="y"):
     prob = torch.exp(model.softmax(score)) # => tensor([[Nの確率，Pの確率]])に変換する
     # torch.Tensorからnumpy配列に変換
     prob = prob.cpu().data.numpy()
-    # モデルの予測ラベルを取り出す(0=>N, 1=>P)
+    # モデルの予測ラベルを取り出す(最もスコアの高いラベル)
     pred = np.argmax(prob, axis=1)[0] # predはint型
-    pos_prob = prob[0][1] # ポジティブの確率
-    # 予測ラベルのリストとポジティブ確率のリストを更新する
+    # 予測ラベルのリストを更新する
     y_pred.append(pred)
-    pos_score.append(pos_prob)
+    # auc計算のためのリストを更新する
+    if params['is_multiclass']:
+      scores.append(prob[0])
+    else:
+      scores.append(prob[0][1]) # ポジティブの確率をappend
   
+  average_mode = 'binary' if not params['is_multiclass'] else 'macro'
   # 各指標の計算
   result = {}
   result['accuracy'] = accuracy_score(y_true, y_pred)
-  result['precision'] = precision_score(y_true, y_pred)
-  result['recall'] = recall_score(y_true, y_pred)
-  result['f1_score'] = f1_score(y_true, y_pred)
+  result['precision'] = precision_score(y_true, y_pred, average=average_mode)
+  result['recall'] = recall_score(y_true, y_pred, average=average_mode)
+  result['f1_score'] = f1_score(y_true, y_pred, average=average_mode)
   result['mcc'] = matthews_corrcoef(y_true, y_pred)
-  result['roc'] = roc_curve(y_true, pos_score)
-  # データの全てのラベルが同じだった場合，roc_auc_scoreがValueErrorとなるのでその時は-1にする
-  try:
-    result['auc'] = roc_auc_score(y_true, pos_score)
-  except ValueError as e :
-    print(e)
-    result['auc'] = -1
-  result['conf_mat'] = confusion_matrix(y_true, y_pred)
+  # バイナリの分類の場合はauc, roc, 混同行列を記録するが，マルチクラスの場合はaucだけ
+  if params['is_multiclass']:
+    try:
+      result['auc'] = roc_auc_score(y_true, scores, average=average_mode, multi_class='ovo')
+    except ValueError as e:
+      print(e)
+      result['auc'] = -1
+  else:
+    result['roc'] = roc_curve(y_true, scores)
+    # データの全てのラベルが同じだった場合，roc_auc_scoreがValueErrorとなるのでその時は-1にする
+    try:
+      result['auc'] = roc_auc_score(y_true, scores)
+    except ValueError as e:
+      print(e)
+      result['auc'] = -1
+    result['conf_mat'] = confusion_matrix(y_true, y_pred)
   return result
 
 def test_bagging(data, models, params, mode="test", device="cpu"):
