@@ -42,7 +42,7 @@ curl -X 'GET' \
   'http://localhost:8000/prism_test' \
   -H 'accept: application/json'
 ```
-This command executes the prism script prepared on the server side in advance, and the result is obtained as an HTTP response.
+This command executes the prism script prepared on the server side in advance (in `app/` dir), and the result is obtained as an HTTP response.
 
 HTTP response:
 ```
