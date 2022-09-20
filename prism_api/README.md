@@ -1,4 +1,4 @@
-prism_api
+Prism API
 ====
 Prism does not work depending on the architecture of the host machine (e.g., M1 Mac). 
 
