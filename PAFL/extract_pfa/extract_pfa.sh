@@ -2,24 +2,23 @@
 
 set -e # Abort if one of the commands fail
 
-datasets=("3" "4" "7" "bp" "mr" "imdb")
-
-for e in ${datasets[@]}; do
-  echo dataset=${e}, model_type="lstm"
-
+for dataset in 3 4 7 bp mr imdb toxic mnist; do
+for variant in srnn gru lstm; do
+  echo dataset=$dataset, variant=$variant
   # original trace取得
-  cd ./extract_original_trace
-  # echo extract original trace...
-  # python do_ori_extract.py ${e} "lstm" 0 0
+  cd ./extract_original_trace 
+  echo extract original trace...
+  python do_ori_extract.py $dataset $variant --device $1 --use_clean 1
 
   # abstract trace生成
   cd ../make_abstract_trace
   echo make abstract trace...
-  python do_abs_making.py ${e} "lstm"
+  python do_abs_making.py $dataset $variant
 
   # pfa抽出
   cd ../learning_pfa
   echo extract pfa...
-  python do_pfa_extract.py ${e} "lstm" 1
+  python do_pfa_extract.py $dataset $variant
   cd ..
+done
 done
