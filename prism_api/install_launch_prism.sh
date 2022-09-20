@@ -15,8 +15,10 @@ sudo apt -y install make gcc g++ default-jdk git
 # Install Python (only needed for testing (prism-auto) currently)
 sudo apt -y install python
 
-# Download the latest development version from GitHub
-git clone https://github.com/prismmodelchecker/prism.git
+# Download the latest development version from GitHub if prism dir does not exist
+if [ ! -d prism ]; then
+  git clone https://github.com/prismmodelchecker/prism.git
+fi
 
 # Compile PRISM and run a single test
 # (should ultimately display: "Testing result: PASS")
