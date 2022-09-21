@@ -3,7 +3,7 @@ tmp/
 prism_api/prism/
 __pycache__/
 *.pyc
-*.csv
+# *.csv
 *.pdf
 .vscode/
 .DS_Store
