@@ -3,6 +3,7 @@ import sys
 import csv
 import numpy as np
 import pandas as pd
+import argparse
 import math
 import random
 from collections import defaultdict
@@ -21,7 +22,7 @@ from utils.susp_score import *
 plt.rcParams['xtick.labelsize'] = 22 # 軸だけ変更されます。
 plt.rcParams['ytick.labelsize'] = 22 # 軸だけ変更されます
 plt.rcParams["axes.labelsize"] = 22 # 軸ラベルのfontsize
-def count_ex_res(metric, theta=10):
+def count_ex_res(metric, method, theta=10):
   # プロットに使用する辞書
   low_counter = defaultdict(int)  # metricsが最低の(k,n) => カウントの対応
   high_counter = defaultdict(int) # metricsが最高の(k,n) => カウントの対応
@@ -34,7 +35,7 @@ def count_ex_res(metric, theta=10):
       for n in range(1, 6):
         for i in range(B):
           # 予測結果の辞書のロード
-          ex_res_path = ExtractData.EX_PRED.format(model_type, dataset, i, k, n, theta)
+          ex_res_path = ExtractData.EX_PRED.format(model_type, dataset, i, k, n, theta, method)
           ex_res = load_pickle(ex_res_path)
           # bootごとの平均なのでBで割ってから加算する
           boot_avg[(k, n, metric)] += ex_res[metric.lower()]/B
@@ -82,18 +83,24 @@ def df_ex_counter(low_counter, high_counter, metric):
 if __name__=='__main__':
   # 定数
   B = 10
-  model_type = ModelType.LSTM
+  # model_type = ModelType.LSTM
+  # コマンドライン引数から受け取り
+  parser = argparse.ArgumentParser()
+  parser.add_argument("model_type", type=str, help='type of models')
+  parser.add_argument("method", type=str, help='type of SBFL formulas')
+  args = parser.parse_args()
+  model_type, method = args.model_type, args.method
   device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
   # データセット名の集合
   dataset_name = ['tomita_3', 'tomita_4', 'tomita_7',\
-                  DataSet.BP, DataSet.MR, DataSet.IMDB]
+                  DataSet.BP, DataSet.MR, DataSet.IMDB, DataSet.TOXIC, DataSet.MNIST]
   # メトリクス名の集合
   metrics_name = ['accuracy', 'f1_score', 'AUC', 'mcc', 'precision', 'recall']
   # metrics_name = ['accuracy', 'AUC']
   num_metrics = len(metrics_name)
   df = pd.DataFrame(columns=['k', 'n', 'cnt', 'type', 'met'])
   for met in metrics_name:
-    low_counter, high_counter = count_ex_res(met)
+    low_counter, high_counter = count_ex_res(met, method)
     df = df.append(df_ex_counter(low_counter, high_counter, met))
 
   plt.figure()
@@ -107,4 +114,5 @@ if __name__=='__main__':
   g.axes[0][1].set_xlabel('k')
   g.axes[0][0].set_ylabel('n')
   g.axes[0][1].set_ylabel('n')
-  plt.savefig('./kn_dataset_relation.pdf', format='pdf', dpi=300)
+  os.makedirs('./discussion1_figs/', exist_ok=True)
+  plt.savefig(f'./discussion1_figs/{model_type}_{method}_kn.pdf', format='pdf', dpi=300)
