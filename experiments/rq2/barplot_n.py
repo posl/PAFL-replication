@@ -82,5 +82,5 @@ if __name__ == '__main__':
     ax.text(n-1+0.25, 2400*0.82, f'{round(val_lstm/2400,3):.1%}', ha='center', va='bottom', size=18, color=sns.color_palette('rocket_r', 3)[2], fontweight='bold')
   ax.legend(handlers, ['SRNN', 'GRU', 'LSTM'], \
     bbox_to_anchor=(1, 1), borderaxespad=0, fontsize=20, ncol=3)
-  plt.savefig('./barplot_per_n.pdf', format='pdf', dpi=300, bbox_inches='tight')
-  print('saved in barplot_per_n.pdf')
+  plt.savefig('./Fig11-barplot-n.pdf', format='pdf', dpi=300, bbox_inches='tight')
+  print('saved in Fig11-barplot-n.pdf')
