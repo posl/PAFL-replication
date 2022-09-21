@@ -2,7 +2,7 @@ import os
 import sys
 # 異なる階層のmodel_utils, utilsをインポートするために必要
 sys.path.append("../../")
-# 異なる階層のRNNfault/extract_pfa/make_abstract_trace/make_abs_traceをインポートするために必要
+# 異なる階層のPAFL/extract_pfa/make_abstract_trace/make_abs_traceをインポートするために必要
 sys.path.append("../")
 import numpy as np
 import torch

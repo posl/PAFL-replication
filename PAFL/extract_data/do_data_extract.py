@@ -1,11 +1,13 @@
 import os
 import sys 
+import argparse
 # 異なる階層のutilsをインポートするために必要
 sys.path.append("../../")
 import numpy as np
 import math
 import re
 import random
+import time
 from collections import defaultdict
 # 異なる階層のutilsからインポート
 from utils.constant import *
@@ -27,8 +29,6 @@ def extract_indices(score_dict, theta):
   ------------------
   ex_indices: list of int
     疑惑状態の通過回数が上位theta%だったデータのインデックスのリスト.
-  rand_indices: list of int
-    ex_indicesと同じ数だけのインデックスのリスト.
   """
   # 対象となるデータ数
   data_size = len(score_dict)
@@ -39,14 +39,17 @@ def extract_indices(score_dict, theta):
   # スコアの上位theta%のデータだけ切り出す
   score_dict = score_dict[:extract_size]
 
-  ex_indices, rand_indices = [], []
+  ex_indices = []
   # 疑惑状態の高い順からextract_size個のデータの行番号を追加していく
   for e in score_dict:
     ex_indices.append(e[0])
+  return ex_indices
+
+def random_indices(data_size, theta):
+  # 抽出するデータ数
+  extract_size = math.floor(data_size * theta / 100)
   # [0, data_size)の範囲で, extract_sizeと同数のランダムな乱整数列を生成
-  rand_indices = random.sample(range(data_size), k=extract_size)
-  
-  return ex_indices, rand_indices
+  return random.sample(range(data_size), k=extract_size)
 
 def extract_processed_data(boot, ex_indices, rand_indices, key="val"):
   """
@@ -87,13 +90,13 @@ def extract_processed_data(boot, ex_indices, rand_indices, key="val"):
 
   # 予測で使うためにはx, y以外のキーも設定しないといけないので
   ex_data["x"], ex_data["y"] = ex_x, ex_y
-  ex_data["vocab"], ex_data["classes"], ex_data["word_to_idx"], ex_data["idx_to_word"] = \
-    boot["vocab"], boot["classes"], boot["word_to_idx"], boot["idx_to_word"]
-
-  rand_data["x"], rand_data["y"] = rand_x, rand_y
-  rand_data["vocab"], rand_data["classes"], rand_data["word_to_idx"], rand_data["idx_to_word"] = \
-    boot["vocab"], boot["classes"], boot["word_to_idx"], boot["idx_to_word"]
-
+  rand_data["x"], rand_data["y"] = rand_x, rand_y  
+  keys = list(boot.keys()).copy()
+  keys.remove('val_x'); keys.remove('val_y')
+  keys.remove('test_x'); keys.remove('test_y')
+  for key in keys:
+    ex_data[key] = boot[key]
+    rand_data[key] = boot[key]
   return ex_data, rand_data
 
 def make_extracted_data_info(model_type, dataset, boot_id, k, ngram_n, theta, ex_data, rand_data):
@@ -136,58 +139,86 @@ def make_extracted_data_info(model_type, dataset, boot_id, k, ngram_n, theta, ex
 
 if __name__ == "__main__":
   B = 10
+  device = "cpu"
   # コマンドライン引数から受け取り
-  dataset = sys.argv[1]
-  model_type = sys.argv[2]
+  parser = argparse.ArgumentParser()
+  parser.add_argument("dataset", type=str, help='abbrev. of datasets')
+  parser.add_argument("model_type", type=str, help='type of models')
+  parser.add_argument("--start_boot_id", type=int, help='What boo_id starts from.', default=0)
+  parser.add_argument("--start_k", type=int, help='What k starts from.', default=2)
+  parser.add_argument("--start_n", type=int, help='What n starts from.', default=1)
+  args = parser.parse_args()
+  dataset, model_type = args.dataset, args.model_type
+  start_boot_id, start_k, start_n = args.start_boot_id, args.start_k, args.start_n
+  
+  method_names = ['ochiai', 'tarantula', 'dstar', 'ochiai2', 'ample']
+
   isTomita = dataset.isdigit()
   # 変数datasetを変更する(tomitaの場合，"1" => "tomita_1"にする)
   if isTomita:
     tomita_id = dataset
     dataset = "tomita_" + tomita_id
-  # sbflのメソッドはochiaiで固定とする
-  method = "ochiai"
+  isImage = (dataset == DataSet.MNIST)
+  input_type = 'text' if not isImage else 'image'
+  num_class = 10 if isImage else 2
   # 抽出対象となるデータ
   target_source = "val"
   # pfa tracesが保存されているファイル名
   pfa_trace_name = "{}_by_train_partition.txt".format(target_source)
   print("dataset = {}\nmodel_type= {}".format(dataset, model_type))
   
-  # オリジナルのデータの読み込み
-  ori_data = load_pickle(get_path(getattr(DataPath, dataset.upper()).SPLIT_DATA)) if not isTomita else \
-    load_pickle(get_path(DataPath.TOMITA.SPLIT_DATA.format(tomita_id)))
+  elapsed_iknth = np.zeros((B, 5, 5, 2))
 
-  for i in range(B):
+  for i in range(start_boot_id, B):
     print("\n========= boot_id={} =========".format(i))
 
     # bootstrap samplingをロード
     boot = load_pickle(get_path(os.path.join(getattr(DataPath, dataset.upper()).BOOT_DATA_DIR, "{}_boot_{}.pkl".format(target_source, i)))) if not isTomita else \
       load_pickle(get_path(os.path.join(DataPath.TOMITA.BOOT_DATA_DIR.format(tomita_id), "{}_boot_{}.pkl".format(target_source, i))))
-    # train_x, train_y以外の属性は合わせる
-    boot["vocab"], boot["classes"], boot["word_to_idx"], boot["idx_to_word"] = \
-      ori_data["vocab"], ori_data["classes"], ori_data["word_to_idx"], ori_data["idx_to_word"]
 
-    for k in range(2, 12, 2):
+    for ki, k in enumerate(range(start_k, 12, 2)):
       print("========= k={} =========".format(k))      
       # pfaトレースの保存パスを取得
       pfa_trace_path = os.path.join(AbstractData.PFA_TRACE.format(model_type, dataset, i, k), pfa_trace_name)
 
-      for n in range(1, 6):
+      for ni, n in enumerate(range(start_n, 6)):
         print("========= n={} =========".format(n))
-        # ngramごとの疑惑値の辞書を取得
-        susp_ngram_dict = get_susp_ngram_dict(model_type, dataset, i, k, n)
-        # relative_ngram_susp_scoreのdictを得る
-        relative_ngram_susp_score = score_relative_ngram_susp(susp_ngram_dict, n, pfa_trace_path)
+        
+        theta2array = defaultdict(list) # theta(={10,50})から抽出データのインデックスへの辞書, valのshapeは(#method, #抽出データ)
+        for method in method_names:
+          # ngramごとの疑惑値の辞書を取得
+          susp_ngram_dict = get_susp_ngram_dict(model_type, dataset, i, k, n, method)
+          # print(susp_ngram_dict)
+          # exit()
+          # ans scoreのdictを得る
+          ans_score = score_relative_ngram_susp(susp_ngram_dict, n, pfa_trace_path)
 
-        # thetaを10から50まで10刻み
-        # for theta in range(10, 60, 10):
+          # thetaを10から50まで10刻み
+          # for theta in range(10, 60, 10):
+          for thetai, theta in enumerate([10, 50]):
+            print("========= theta={} =========".format(theta))
+            # スコアの上位theta%のデータのインデックス及びランダムなインデックスを取得
+            s_time = time.perf_counter()
+            ex_indices = extract_indices(ans_score, theta)
+            f_time = time.perf_counter()
+            elapsed_iknth[i][ki][ni][thetai] = f_time - s_time
+            theta2array[theta].append(ex_indices)
+            # インデックスからデータの取り出しを行う
+            # ex_data, rand_data = extract_processed_data(boot, ex_indices, rand_indices)
+            # 取り出したデータの情報をjsonで保存
+            # make_extracted_data_info(model_type, dataset, i, k, n, theta, ex_data, rand_data)
+            # 抽出したデータをpklで保存する
+            # save_pickle(ExtractData.EX.format(model_type, dataset, i, k, n, theta), ex_data)
+            # save_pickle(ExtractData.RAND.format(model_type, dataset, i, k, n, theta), rand_data)
+        
+        # 結果を保存
         for theta in [10, 50]:
-          print("========= theta={} =========".format(theta))
-          # スコアの上位theta%のデータのインデックス及びランダムなインデックスを取得
-          ex_indices, rand_indices = extract_indices(relative_ngram_susp_score, theta)
-          # インデックスからデータの取り出しを行う
-          ex_data, rand_data = extract_processed_data(boot, ex_indices, rand_indices)
-          # 取り出したデータの情報をjsonで保存
-          make_extracted_data_info(model_type, dataset, i, k, n, theta, ex_data, rand_data)
-          # 抽出したデータをpklで保存する
-          save_pickle(ExtractData.EX.format(model_type, dataset, i, k, n, theta), ex_data)
-          save_pickle(ExtractData.RAND.format(model_type, dataset, i, k, n, theta), rand_data)
+          rand_indices = random_indices(len(boot['val_x']), theta)
+          os.makedirs(ExtractData.DIR.format(model_type, dataset, i, k, n, theta), exist_ok=True)
+          np.savez(os.path.join(ExtractData.DIR.format(model_type, dataset, i, k, n, theta), 'names_indices'), \
+            names=np.array(method_names), indices=np.array(theta2array[theta]), rand=rand_indices)
+  # データセットごとの平均時間を保存
+  elapsed_mean = np.mean(elapsed_iknth)
+  print(f'mean elapsed in {B} boot, five k settings, five n settings, two thetas: {elapsed_mean} [sec.]')
+  with open(f'elapsed_time_{model_type}.csv', 'a') as f:
+    f.write(f'{dataset}, {elapsed_mean}\n')

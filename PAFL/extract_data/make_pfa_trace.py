@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 import glob
 # 異なる階層のutilsをインポートするために必要
 sys.path.append("../../")
@@ -14,7 +15,7 @@ from model_utils.model_util import load_model
 from get_pfa_spectrum.do_pfa_spectrum import get_total_symbols, load_model_and_data
 from get_pfa_spectrum.trace_on_pfa import trace_abs_seq, extract_l1_trace
 
-def abstract_trace_by_train_partition(model_type, dataset, boot_id, k, model, data, wv_matrix, input_dim, file_name, key):
+def abstract_trace_by_train_partition(model_type, dataset, boot_id, k, model, data, input_dim, file_name, key, num_class, use_clean, wv_matrix=None):
   """
   対象となるデータを対象となるRNNに入力した際の隠れ状態を, trainデータで学習したpartitionerによってクラスタに割り当てる
   1) データやRNNモデル, partitionerのロード
@@ -55,7 +56,10 @@ def abstract_trace_by_train_partition(model_type, dataset, boot_id, k, model, da
   # 対象データの各サンプルについて, 指定したpartitionerによってabs traceを取得
   X, Y = data["{}_x".format(key)], data["{}_y".format(key)]
   for x, y in zip(X, Y):
-    abs_trace = extract_l1_trace(x, model, input_dim, data["word_to_idx"], wv_matrix, "cpu", partitioner)
+    if dataset == DataSet.MNIST:
+      abs_trace = extract_l1_trace(x, model, input_dim, "cpu", partitioner, use_clean=use_clean, num_class=num_class)
+    else:
+      abs_trace = extract_l1_trace(x, model, input_dim, "cpu", partitioner, word2idx=data["word_to_idx"], wv_matrix=wv_matrix, use_clean=use_clean, num_class=num_class)
     with open(save_path, "a") as f:
       line = ",".join([str(ele) for ele in abs_trace])
       f.write(line + "\n")
@@ -103,36 +107,48 @@ def load_abs_data(model_type, dataset, boot_id, k, abs_trace_name, total_symbols
 
 if __name__ == "__main__":
   B = 10
-  device = "cpu" # これはgpuにしない
+  device = "cpu"
   # コマンドライン引数から受け取り
-  dataset = sys.argv[1]
+  parser = argparse.ArgumentParser()
+  parser.add_argument("dataset", type=str, help='abbrev. of datasets')
+  parser.add_argument("model_type", type=str, help='type of models')
+  parser.add_argument("i", type=int, help='The id of bootstrap sample.')
+  parser.add_argument("k", type=int, help='The number of cluster.')
+  args = parser.parse_args()
+  dataset, model_type, i, k = args.dataset, args.model_type, args.i, args.k
+  
   isTomita = dataset.isdigit()
   # 変数datasetを変更する(tomitaの場合，"1" => "tomita_1"にする)
   if isTomita:
     tomita_id = dataset
     dataset = "tomita_" + tomita_id
-  # モデルのタイプ，boot_id, クラスタ数をコマンドライン引数で受け取る
-  model_type = sys.argv[2]
-  i = sys.argv[3]
-  k = sys.argv[4]
+  isImage = (dataset == DataSet.MNIST)
+  input_type = 'text' if not isImage else 'image'
+  num_class = 10 if isImage else 2
   
-  # for debugging========
-  # dataset = "bp"
-  # =====================
-
   # オリジナルのデータの読み込み
   ori_data = load_pickle(get_path(getattr(DataPath, dataset.upper()).SPLIT_DATA)) if not isTomita else \
     load_pickle(get_path(DataPath.TOMITA.SPLIT_DATA.format(tomita_id)))
-  # wv_matrixとinput_dimの設定
-  wv_matrix = load_pickle(get_path(getattr(DataPath, dataset.upper()).WV_MATRIX)) if not isTomita else \
-    load_pickle(get_path(DataPath.TOMITA.WV_MATRIX.format(tomita_id)))
+  if not isImage:
+    # wv_matrixとinput_dimの設定
+    wv_matrix = load_pickle(get_path(getattr(DataPath, dataset.upper()).WV_MATRIX)) if not isTomita else \
+      load_pickle(get_path(DataPath.TOMITA.WV_MATRIX.format(tomita_id)))
+  else:
+    wv_matrix = None
 
   if isTomita:
     input_dim = 3
+  elif isImage:
+    input_dim = 28
   elif dataset == DataSet.BP:
     input_dim = 29
   else: # dataset == MR or IMDB
     input_dim = 300
+
+  if dataset == DataSet.MR or dataset == DataSet.IMDB or dataset == DataSet.TOXIC:
+    use_clean = 1
+  else:
+    use_clean = 0
 
   # valデータの情報
   target_source = "val"
@@ -147,9 +163,12 @@ if __name__ == "__main__":
   # データを読み出す
   data = load_pickle(get_path(os.path.join(getattr(DataPath, dataset.upper()).BOOT_DATA_DIR, "{}_boot_{}.pkl".format(target_source, i)))) if not isTomita else \
   load_pickle(get_path(os.path.join(DataPath.TOMITA.BOOT_DATA_DIR.format(tomita_id), "{}_boot_{}.pkl".format(target_source, i))))
-  # train_x, train_y以外の属性は合わせる
-  data["vocab"], data["classes"], data["word_to_idx"], data["idx_to_word"] = \
-    ori_data["vocab"], ori_data["classes"], ori_data["word_to_idx"], ori_data["idx_to_word"]
+  # train_x, train_y, val_x, val_y以外の属性は合わせる
+  keys = list(ori_data.keys()).copy()
+  keys.remove('train_x'); keys.remove('train_y')
+  keys.remove('val_x'); keys.remove('val_y')
+  for key in keys:
+    data[key] = ori_data[key]
 
   # モデルを読み出す
   model_dir = os.path.join(getattr(getattr(TrainedModel, model_type.upper()), dataset.upper()), "boot_{}".format(i)) if not isTomita  else \
@@ -163,7 +182,7 @@ if __name__ == "__main__":
   if os.path.exists(AbstractData.L1.format(model_type, dataset, i, k, abs_trace_file_name + '.txt')):
     os.remove(AbstractData.L1.format(model_type, dataset, i, k, abs_trace_file_name + '.txt'))
   print("make abstract traces for val data...")
-  abstract_trace_by_train_partition(model_type, dataset, i, k, model, data, wv_matrix, input_dim, abs_trace_file_name, target_source)
+  abstract_trace_by_train_partition(model_type, dataset, i, k, model, data, input_dim, abs_trace_file_name, target_source, num_class, use_clean, wv_matrix)
   print("done making abstract traces for val data.")
   # for abs_trace_name in ["train", "test_by_train_partition", abs_trace_file_name]:
   for abs_trace_name in [abs_trace_file_name]:
