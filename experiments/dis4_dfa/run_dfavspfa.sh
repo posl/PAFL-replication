@@ -1,0 +1,16 @@
+#!/bin/bash
+echo dfa_spectrum...
+bash dfa_spectrum.sh
+
+echo calc_ngram_susp...
+bash calc_ngram_susp.sh
+
+echo extract_data...
+bash extract_data.sh
+
+echo eval_extracted_data...
+bash eval_extracted_data.sh
+
+echo aggregate_results...
+bash aggregate_res.sh
+python make_graph.py
