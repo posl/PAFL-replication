@@ -11,21 +11,6 @@ from collections import defaultdict
 from utils.constant import *
 from utils.help_func import load_pickle
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-sns.set()
-sns.set_context('paper', 1.5)
-import warnings
-warnings.simplefilter('ignore')
-plt.rcParams['font.family'] = 'sans-serif' # font familyの設定
-plt.rcParams["font.size"] = 20 # 全体のフォントサイズが変更されます。
-plt.rcParams['xtick.labelsize'] = 18 # 軸だけ変更されます。
-plt.rcParams['ytick.labelsize'] = 18 # 軸だけ変更されます
-plt.rcParams["figure.subplot.left"] = 0
-plt.rcParams["figure.subplot.bottom"] = 0
-plt.rcParams["figure.subplot.right"] =0.95  
-plt.rcParams["figure.subplot.top"] = 0.95
-
 def build_df(model_type, stat):
   dir_name = 'pred_table_for_look' if not stat else 'stat_result'
   datasets = ['Tomita3', 'Tomita4', 'Tomita7', 'BP', 'RTMR', 'IMDB', 'MNIST', 'TOXIC']
