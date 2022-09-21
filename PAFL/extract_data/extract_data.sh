@@ -15,4 +15,6 @@ done
 for variant in srnn gru lstm; do
   python make_pred_result_for_look.py $variant
   python average_pred_result_for_look.py $variant
+  python ngram_Utest_ex_vs_rand.py $variant
+  python make_table_for_paper.py $variant
 done
